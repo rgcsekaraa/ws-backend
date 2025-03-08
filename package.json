@@ -1,0 +1,24 @@
+{
+  "name": "colourterritory",
+  "version": "1.0.0",
+  "description": "WebSocket server based game",
+  "main": "src/index.js",
+  "author": {
+    "name": "Chan RG"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js"
+  },
+  "dependencies": {
+    "axios": "^1.8.2",
+    "cors": "^2.8.5",
+    "express": "^4.18.0",
+    "geoip-lite": "^1.4.10",
+    "request-ip": "^3.3.0",
+    "socket.io": "^4.7.0"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.22"
+  }
+}
