@@ -1,4 +1,3 @@
-// File: server/src/index.js
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -36,15 +35,26 @@ let timeLeft = 60;
 let gameInterval = null;
 let winner = null;
 let countdown = null;
-let adminId = null;
 
-// Game setup - first block always black (admin)
+// Admin always exists
+const adminPlayer = {
+  id: 'admin', // Static admin ID
+  name: 'Admin',
+  color: '#000000',
+  score: 1, // Admin starts with the first square
+  isAdmin: true,
+};
+
+// Admin owns the first square
 grid[0] = {
   id: 0,
   color: '#000000',
   ownerId: 'admin',
   ownerName: 'Admin',
 };
+
+// Add admin to the players list
+players.push(adminPlayer);
 
 // Function to generate a random HSL color
 function generateRandomColor() {
@@ -82,21 +92,21 @@ function startGameTimer() {
   winner = null;
   countdown = null;
 
-  // Reset player scores and assign colors
+  // Reset player scores (except admin)
   players.forEach((player) => {
-    player.score = player.id === adminId ? 1 : 0;
+    if (!player.isAdmin) {
+      player.score = 0;
+    }
   });
 
-  // Reset grid except for admin square
+  // Reset grid (except admin square)
   grid = grid.map((square, index) => {
     if (index === 0) {
       return {
         id: 0,
         color: '#000000',
-        ownerId: adminId || 'admin',
-        ownerName: adminId
-          ? players.find((p) => p.id === adminId)?.name || 'Admin'
-          : 'Admin',
+        ownerId: 'admin',
+        ownerName: 'Admin',
       };
     }
     return {
@@ -107,7 +117,6 @@ function startGameTimer() {
     };
   });
 
-  // Broadcast game state
   broadcastGameState();
 
   gameInterval = setInterval(() => {
@@ -152,17 +161,6 @@ function endGame() {
 
   winner = winningPlayer;
 
-  if (!winningPlayer && adminId) {
-    winner = players.find((p) => p.id === adminId);
-  } else if (!winningPlayer) {
-    winner = {
-      id: 'admin',
-      name: 'Admin',
-      color: '#000000',
-      score: 1,
-    };
-  }
-
   broadcastGameState();
 
   countdown = 10;
@@ -188,6 +186,7 @@ function broadcastGameState() {
   });
 }
 
+// Calculate player scores
 function calculateScores() {
   const scores = {};
 
@@ -211,13 +210,7 @@ io.on('connection', (socket) => {
     `Client from ${socket.handshake.address} → Country: ${country.name}`
   );
 
-  if (players.length === 0 && !adminId) {
-    adminId = socket.id;
-    socket.emit('adminStatus', true);
-  } else {
-    socket.emit('adminStatus', false);
-  }
-
+  // Emit initial game state
   socket.emit('gameState', {
     grid,
     players,
@@ -230,7 +223,6 @@ io.on('connection', (socket) => {
   socket.on('joinGame', (data, callback) => {
     const existingPlayer = players.find((player) => player.name === data.name);
     if (existingPlayer) {
-      // Name already taken, send error message
       callback({
         success: false,
         message: 'This name is already taken. Please choose a different one.',
@@ -238,26 +230,24 @@ io.on('connection', (socket) => {
       return;
     }
 
+    // Prevent players from joining as admin
+    if (data.name.toLowerCase() === 'admin') {
+      callback({
+        success: false,
+        message:
+          'You cannot use the name "Admin". Please choose a different name.',
+      });
+      return;
+    }
+
     const newPlayer = {
       id: socket.id,
       name: data.name.substring(0, 15), // Limit name to 15 characters
-      color: data.color, // Use the color provided by the client
+      color: data.color,
       score: 0,
       country,
+      isAdmin: false, // Regular players are not admin
     };
-
-    if (socket.id === adminId) {
-      newPlayer.color = '#000000';
-      newPlayer.score = 1; // Admin starts with first square
-    } else {
-      if (newPlayer.color === '#000000') {
-        // Non-admin player cannot have black color
-        newPlayer.color = generateRandomColor();
-        while (players.some((p) => p.color === newPlayer.color)) {
-          newPlayer.color = generateRandomColor();
-        }
-      }
-    }
 
     players.push(newPlayer);
 
@@ -269,18 +259,15 @@ io.on('connection', (socket) => {
     calculateScores();
     broadcastGameState();
 
-    // Send success callback
     callback({ success: true });
   });
 
+  // Handle square claiming
   socket.on('claimSquare', (squareId) => {
-    if (countdown !== null || winner !== null) return;
+    if (countdown !== null || winner !== null || squareId === 0) return; // Prevent claiming the admin square
 
     const player = players.find((p) => p.id === socket.id);
     if (!player) return;
-
-    // Admin cannot claim any square except the first one
-    if (squareId === 0 && socket.id !== adminId) return;
 
     // Update grid
     grid[squareId] = {
@@ -294,30 +281,11 @@ io.on('connection', (socket) => {
     broadcastGameState();
   });
 
+  // Handle player disconnection
   socket.on('disconnect', () => {
     console.log('User disconnected:', socket.id);
 
     players = players.filter((player) => player.id !== socket.id);
-
-    if (socket.id === adminId) {
-      adminId = players.length > 0 ? players[0].id : null;
-
-      if (adminId) {
-        const adminPlayer = players.find((p) => p.id === adminId);
-        if (adminPlayer) {
-          adminPlayer.color = '#000000';
-
-          grid[0] = {
-            id: 0,
-            color: '#000000',
-            ownerId: adminId,
-            ownerName: adminPlayer.name,
-          };
-
-          io.to(adminId).emit('adminStatus', true);
-        }
-      }
-    }
 
     if (players.length === 0) {
       clearInterval(gameInterval);
@@ -326,6 +294,7 @@ io.on('connection', (socket) => {
       winner = null;
       countdown = null;
 
+      // Reset grid (except admin square)
       grid = grid.map((_, index) => {
         if (index === 0) {
           return {
