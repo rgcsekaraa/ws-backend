@@ -56,13 +56,13 @@ grid[0] = {
 // Add admin to the players list
 players.push(adminPlayer);
 
-// Function to generate a random HSL color
-function generateRandomColor() {
-  const hue = Math.floor(Math.random() * 360);
-  const saturation = Math.floor(Math.random() * 100);
-  const lightness = Math.floor(Math.random() * 60);
-  return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
-}
+// // Function to generate a random HSL color
+// function generateRandomColor() {
+//   const hue = Math.floor(Math.random() * 360);
+//   const saturation = Math.floor(Math.random() * 100);
+//   const lightness = Math.floor(Math.random() * 60);
+//   return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+// }
 
 // Get country information from IP address
 function getCountryFromIP(socket) {
